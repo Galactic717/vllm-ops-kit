@@ -1,0 +1,58 @@
+name: Verify infrastructure
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: bash scripts/ci_tools.sh "${{ runner.temp }}/ops-bin"
+      - run: echo "${{ runner.temp }}/ops-bin" >> "$GITHUB_PATH"
+      - run: python -m pip install ansible-core==2.19.8
+      - run: bash scripts/ci_lint.sh
+  kind:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: bash scripts/ci_tools.sh "${{ runner.temp }}/ops-bin"
+      - run: echo "${{ runner.temp }}/ops-bin" >> "$GITHUB_PATH"
+      - run: python scripts/images.py --fetch
+      - run: python scripts/kind_lab.py
+      - if: failure()
+        run: |
+          mkdir -p loadtest/results/latest
+          kind export logs --name vllm-ops-kit loadtest/results/latest/kind-logs || true
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kind-evidence
+          path: loadtest/results/latest
+  security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: bash scripts/ci_tools.sh "${{ runner.temp }}/ops-bin"
+      - run: echo "${{ runner.temp }}/ops-bin" >> "$GITHUB_PATH"
+      - run: python -m pip install checkov==3.2.524
+      - run: python scripts/images.py --fetch
+      - run: bash scripts/ci_security.sh
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: loadtest/results/latest/security
