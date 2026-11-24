@@ -1,0 +1,2 @@
+bucket = "replace-with-a-pre-existing-state-bucket"
+prefix = "prod-gpu"

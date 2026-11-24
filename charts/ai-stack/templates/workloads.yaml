@@ -1,0 +1,209 @@
+{{- $name := include "ops.name" . -}}
+{{- $backend := .Values.backend -}}
+{{- if not (has $backend.mode (list "fixture" "vllm" "external")) -}}
+{{- fail "backend.mode must be fixture, vllm or external" -}}
+{{- end -}}
+{{- $url := printf "http://%s-backend:8080/v1" $name -}}
+{{- if eq $backend.mode "external" -}}
+{{- $url = required "backend.externalUrl is required in external mode" $backend.externalUrl -}}
+{{- end -}}
+{{- $apps := list
+  (dict "name" "api" "image" .Values.images.verstak "uid" 10001 "port" 8000 "live" "/ops/live" "ready" "/healthz" "cpu" "100m" "memory" "192Mi" "maxMemory" "512Mi")
+  (dict "name" "worker" "image" .Values.images.verstak "uid" 10001 "cpu" "100m" "memory" "192Mi" "maxMemory" "768Mi")
+  (dict "name" "beat" "image" .Values.images.verstak "uid" 10001 "cpu" "30m" "memory" "96Mi" "maxMemory" "384Mi")
+  (dict "name" "gateway" "image" .Values.images.verifine "uid" 1000 "port" 8088 "live" "/healthz" "ready" "/healthz" "cpu" "60m" "memory" "64Mi" "maxMemory" "384Mi")
+  (dict "name" "dependencies" "image" .Values.images.verstak "uid" 10001 "port" 9108 "live" "/health" "ready" "/health" "cpu" "20m" "memory" "32Mi" "maxMemory" "128Mi") -}}
+{{- if eq $backend.mode "fixture" -}}
+{{- $apps = append $apps (dict "name" "backend" "image" $backend.fixtureImage "uid" 10001 "port" 8080 "live" "/health" "ready" "/health" "cpu" "30m" "memory" "32Mi" "maxMemory" "128Mi") -}}
+{{- else if eq $backend.mode "vllm" -}}
+{{- $apps = append $apps (dict "name" "backend" "image" $backend.vllmImage "uid" 2000 "port" 8080 "live" "/health" "ready" "/health" "cpu" "2" "memory" "8Gi" "maxMemory" "16Gi" "gpu" true) -}}
+{{- end -}}
+{{- range $app := $apps }}
+{{- $selector := dict "root" $ "component" $app.name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-{{ $app.name }}
+  labels:
+    {{- include "ops.selector" $selector | nindent 4 }}
+spec:
+  {{- if ne $app.name "api" }}
+  replicas: 1
+  {{- else if not $.Values.autoscaling.enabled }}
+  replicas: {{ $.Values.verstak.replicas }}
+  {{- end }}
+  {{- if or $app.gpu (eq $app.name "beat") }}
+  strategy:
+    type: Recreate
+  {{- else }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "ops.selector" $selector | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ops.selector" $selector | nindent 8 }}
+      annotations:
+        checksum/support: {{ include (print $.Template.BasePath "/support.yaml") $ | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ ternary 60 30 (eq $app.name "worker") }}
+      securityContext:
+        {{- include "ops.podSecurity" $app.uid | nindent 8 }}
+      {{- if $app.gpu }}
+      {{- with $backend.runtimeClassName }}
+      runtimeClassName: {{ . | quote }}
+      {{- end }}
+      nodeSelector:
+        {{- toYaml $backend.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml $backend.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if eq $app.name "api" }}
+      initContainers:
+        - name: migrate
+          image: {{ $app.image | quote }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          env:
+            {{- include "ops.dbEnv" $ | nindent 12 }}
+          securityContext:
+            {{- include "ops.containerSecurity" . | nindent 12 }}
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 500m, memory: 384Mi}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      {{- end }}
+      containers:
+        - name: {{ $app.name }}
+          image: {{ $app.image | quote }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          securityContext:
+            {{- include "ops.containerSecurity" . | nindent 12 }}
+          {{- with $app.port }}
+          ports:
+            - {name: http, containerPort: {{ . }}}
+          {{- end }}
+          {{- if eq $app.name "api" }}
+          command: ["uvicorn", "ops_api:app", "--app-dir", "/opt/ops", "--host", "0.0.0.0", "--port", "8000"]
+          {{- else if eq $app.name "worker" }}
+          command: ["celery", "-A", "verstak.workers:app", "worker", "--pool=solo", "-l", "INFO"]
+          {{- else if eq $app.name "beat" }}
+          command: ["celery", "-A", "verstak.workers:app", "beat", "--schedule", "/tmp/celerybeat-schedule", "-l", "INFO"]
+          {{- else if eq $app.name "gateway" }}
+          command: ["verifine", "gateway", "--host", "0.0.0.0", "--port", "8088"]
+          {{- else if eq $app.name "dependencies" }}
+          command: ["python", "/opt/ops/dependencies.py"]
+          {{- else if $app.gpu }}
+          command: ["vllm", "serve"]
+          args:
+            - {{ $backend.modelPath | quote }}
+            - --host=0.0.0.0
+            - --port=8080
+            - --served-model-name={{ $backend.model }}
+            - --max-model-len={{ $backend.maxModelLen }}
+            - --gpu-memory-utilization={{ $backend.gpuMemoryUtilization }}
+            - --enable-prefix-caching
+          {{- end }}
+          env:
+            - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+            - {name: HOME, value: /tmp}
+            {{- if has $app.name (list "api" "worker" "beat" "dependencies") }}
+            {{- include "ops.dbEnv" $ | nindent 12 }}
+            {{- end }}
+            {{- if eq $app.name "api" }}
+            {{- range $key := list "VERSTAK_JWT_SECRET" "VERSTAK_CLIENTS_JSON" "VERSTAK_METRICS_TOKEN" }}
+            {{- include "ops.secretEnv" (dict "root" $ "name" $key) | nindent 12 }}
+            {{- end }}
+            {{- else if eq $app.name "worker" }}
+            - {name: VERSTAK_LLM_PROVIDER, value: {{ $.Values.verstak.llmProvider | quote }}}
+            - {name: VERSTAK_LLM_URL, value: "http://{{ $name }}-gateway:8088/v1/chat/completions"}
+            - {name: VERSTAK_LLM_MODEL, value: {{ $backend.model | quote }}}
+            {{- include "ops.secretEnv" (dict "root" $ "name" "VERSTAK_LLM_API_KEY" "key" "VERIFINE_GATEWAY_KEY") | nindent 12 }}
+            {{- else if eq $app.name "gateway" }}
+            - {name: VERIFINE_BACKEND, value: {{ ternary $backend.externalKind "vllm" (eq $backend.mode "external") | quote }}}
+            - {name: VERIFINE_BACKEND_URL, value: {{ $url | quote }}}
+            - {name: VERIFINE_MODEL, value: {{ $backend.model | quote }}}
+            - {name: VERIFINE_ALLOW_NETWORK_BACKEND, value: "1"}
+            {{- include "ops.secretEnv" (dict "root" $ "name" "VERIFINE_GATEWAY_KEY") | nindent 12 }}
+            {{- include "ops.secretEnv" (dict "root" $ "name" "VERIFINE_API_KEY" "optional" true) | nindent 12 }}
+            {{- else if $app.gpu }}
+            - {name: HF_HUB_OFFLINE, value: "1"}
+            - {name: HF_HUB_DISABLE_TELEMETRY, value: "1"}
+            - {name: VLLM_NO_USAGE_STATS, value: "1"}
+            - {name: VLLM_CACHE_ROOT, value: /tmp/vllm}
+            {{- end }}
+          {{- if $app.port }}
+          startupProbe:
+            httpGet: {path: {{ $app.live }}, port: http}
+            periodSeconds: {{ ternary 5 2 (default false $app.gpu) }}
+            failureThreshold: {{ ternary 120 30 (default false $app.gpu) }}
+          readinessProbe:
+            httpGet: {path: {{ $app.ready }}, port: http}
+            periodSeconds: 3
+            timeoutSeconds: 4
+          livenessProbe:
+            httpGet: {path: {{ $app.live }}, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 4
+          {{- end }}
+          resources:
+            requests:
+              cpu: {{ $app.cpu | quote }}
+              memory: {{ $app.memory | quote }}
+              {{- if $app.gpu }}
+              nvidia.com/gpu: 1
+              {{- end }}
+            limits:
+              cpu: {{ ternary "4" "1" (default false $app.gpu) | quote }}
+              memory: {{ $app.maxMemory | quote }}
+              {{- if $app.gpu }}
+              nvidia.com/gpu: 1
+              {{- end }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            {{- if has $app.name (list "api" "dependencies") }}
+            - {name: support, mountPath: /opt/ops, readOnly: true}
+            {{- end }}
+            {{- if $app.gpu }}
+            - {name: model, mountPath: /model, readOnly: true}
+            - {name: shm, mountPath: /dev/shm}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if has $app.name (list "api" "dependencies") }}
+        - name: support
+          configMap:
+            name: {{ $name }}-support
+        {{- end }}
+        {{- if $app.gpu }}
+        - name: model
+          persistentVolumeClaim:
+            claimName: {{ required "backend.modelClaim is required for vLLM" $backend.modelClaim | quote }}
+        - name: shm
+          emptyDir: {medium: Memory, sizeLimit: 2Gi}
+        {{- end }}
+{{- if $app.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-{{ $app.name }}
+  labels:
+    {{- include "ops.selector" $selector | nindent 4 }}
+spec:
+  selector:
+    {{- include "ops.selector" $selector | nindent 4 }}
+  ports:
+    - {name: http, port: {{ $app.port }}, targetPort: http}
+{{- end }}
+{{- end }}

@@ -1,0 +1,14 @@
+{
+  "time_utc": "2026-11-24T21:54:14.9613553Z",
+  "model": "verifine-qwen-q4",
+  "model_file": null,
+  "backend_port": 9941,
+  "gateway": "verifine-slm",
+  "chat_ms": 201.6,
+  "completion_tokens": 2,
+  "prompt_tokens": 19,
+  "stream_done": true,
+  "gateway_metrics": true,
+  "llama_metrics": false,
+  "wall_seconds": 1.63
+}

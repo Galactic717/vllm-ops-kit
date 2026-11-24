@@ -1,0 +1,44 @@
+rule_files:
+  - llm_slo_alerts.yml
+evaluation_interval: 1m
+tests:
+  - name: Saturation and dependency alerts fire after their hold times
+    interval: 1m
+    input_series:
+      - series: 'vllm:kv_cache_usage_perc{namespace="ai-stack",service="ops-backend",model_name="verifine"}'
+        values: '0.9+0x10'
+      - series: 'ops_redis_up{namespace="ai-stack",service="ops-dependencies"}'
+        values: '0+0x10'
+      - series: 'verstak_db_pool_checked_out{instance="api:8000"}'
+        values: '9+0x10'
+      - series: 'verstak_db_pool_size{instance="api:8000"}'
+        values: '10+0x10'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: KVCacheSaturation
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: KVCacheSaturation
+        exp_alerts:
+          - exp_labels:
+              namespace: ai-stack
+              service: ops-backend
+              model_name: verifine
+              severity: warning
+            exp_annotations:
+              summary: vLLM KV cache utilization exceeds 85 percent
+      - eval_time: 2m
+        alertname: DependencyUnavailable
+        exp_alerts:
+          - exp_labels:
+              namespace: ai-stack
+              service: ops-dependencies
+              severity: critical
+            exp_annotations:
+              summary: PostgreSQL or Redis failed its own exporter check
+      - eval_time: 4m
+        alertname: PostgresPoolExhaustion
+        exp_alerts:
+          - exp_labels: {instance: "api:8000", severity: warning}
+            exp_annotations:
+              summary: A Verstak API replica is using at least 90 percent of its connection pool

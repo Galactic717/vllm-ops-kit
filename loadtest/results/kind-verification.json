@@ -1,0 +1,71 @@
+{
+  "time_utc": "2026-11-24T21:57:04.314664+00:00",
+  "backend": "CPU fixture",
+  "kubernetes": "kind v1.34.0",
+  "helm_wait_seconds": 20.48,
+  "celery_status": "waiting_approval",
+  "ingress": true,
+  "stream": true,
+  "structured_extraction": true,
+  "network_policy": true,
+  "restricted_pods": true,
+  "prometheus": true,
+  "grafana": true,
+  "alertmanager": true,
+  "hpa_samples": {
+    "smoke": [
+      {
+        "current": 2,
+        "desired": 2,
+        "cpu_percent_of_request": 3
+      },
+      {
+        "current": 2,
+        "desired": 2,
+        "cpu_percent_of_request": 3
+      },
+      {
+        "current": 2,
+        "desired": 2,
+        "cpu_percent_of_request": 3
+      }
+    ],
+    "spike": [
+      {
+        "current": 2,
+        "desired": 2,
+        "cpu_percent_of_request": 3
+      },
+      {
+        "current": 2,
+        "desired": 2,
+        "cpu_percent_of_request": 4
+      },
+      {
+        "current": 2,
+        "desired": 2,
+        "cpu_percent_of_request": 4
+      },
+      {
+        "current": 2,
+        "desired": 2,
+        "cpu_percent_of_request": 4
+      },
+      {
+        "current": 2,
+        "desired": 2,
+        "cpu_percent_of_request": 7
+      },
+      {
+        "current": 2,
+        "desired": 2,
+        "cpu_percent_of_request": 7
+      },
+      {
+        "current": 2,
+        "desired": 2,
+        "cpu_percent_of_request": 7
+      }
+    ]
+  }
+}

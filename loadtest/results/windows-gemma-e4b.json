@@ -1,0 +1,14 @@
+{
+  "time_utc": "2026-11-24T21:52:49.1850300Z",
+  "model": "ops-local",
+  "model_file": "gemma-4-E4B-it-UD-Q8_K_XL.gguf",
+  "backend_port": 18091,
+  "gateway": "verifine-slm",
+  "chat_ms": 497.4,
+  "completion_tokens": 2,
+  "prompt_tokens": 27,
+  "stream_done": true,
+  "gateway_metrics": true,
+  "llama_metrics": true,
+  "wall_seconds": 4.43
+}

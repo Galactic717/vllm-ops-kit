@@ -1,0 +1,158 @@
+{
+    "root_group": {
+        "checks": {
+            "chat returned generated text": {
+                "passes": 61,
+                "fails": 0,
+                "name": "chat returned generated text",
+                "path": "::chat returned generated text",
+                "id": "d400c97dfeb706f2f7153651f3a7400f"
+            },
+            "workflows API is authenticated": {
+                "name": "workflows API is authenticated",
+                "path": "::workflows API is authenticated",
+                "id": "d22562bc9166d2066875202ca467c5d2",
+                "passes": 61,
+                "fails": 0
+            }
+        },
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {}
+    },
+    "metrics": {
+        "http_req_duration": {
+            "p(99)": 6.385215999999984,
+            "max": 7.668,
+            "count": 122,
+            "avg": 3.2323245901639366,
+            "p(50)": 3.58875,
+            "p(95)": 4.669035
+        },
+        "http_req_receiving": {
+            "p(50)": 0,
+            "p(95)": 0,
+            "p(99)": 0.5255519999999999,
+            "max": 0.5339,
+            "count": 122,
+            "avg": 0.017169672131147545
+        },
+        "iterations": {
+            "rate": 5.080552958388914,
+            "count": 61
+        },
+        "http_req_blocked": {
+            "avg": 0.01880573770491803,
+            "p(50)": 0,
+            "p(95)": 0,
+            "p(99)": 0.6849779999999984,
+            "max": 1.0393,
+            "count": 122
+        },
+        "data_sent": {
+            "count": 47885,
+            "rate": 3988.2340723352972
+        },
+        "checks": {
+            "passes": 122,
+            "fails": 0,
+            "thresholds": {
+                "rate>0.99": false
+            },
+            "value": 1
+        },
+        "http_reqs": {
+            "count": 122,
+            "rate": 10.161105916777828
+        },
+        "http_req_connecting": {
+            "max": 1.0393,
+            "count": 122,
+            "avg": 0.014474590163934424,
+            "p(50)": 0,
+            "p(95)": 0,
+            "p(99)": 0.5740139999999943
+        },
+        "data_received": {
+            "count": 34160,
+            "rate": 2845.1096566977917
+        },
+        "http_req_tls_handshaking": {
+            "avg": 0,
+            "p(50)": 0,
+            "p(95)": 0,
+            "p(99)": 0,
+            "max": 0,
+            "count": 122
+        },
+        "http_req_sending": {
+            "p(99)": 0,
+            "max": 0,
+            "count": 122,
+            "avg": 0,
+            "p(50)": 0,
+            "p(95)": 0
+        },
+        "http_req_waiting": {
+            "p(99)": 5.978523999999988,
+            "max": 7.668,
+            "count": 122,
+            "avg": 3.215154918032789,
+            "p(50)": 3.5495,
+            "p(95)": 4.669035
+        },
+        "vus_max": {
+            "value": 6,
+            "min": 6,
+            "max": 6
+        },
+        "http_req_duration{expected_response:true}": {
+            "max": 7.668,
+            "count": 122,
+            "avg": 3.2323245901639366,
+            "p(50)": 3.58875,
+            "p(95)": 4.669035,
+            "p(99)": 6.385215999999984
+        },
+        "vus": {
+            "value": 0,
+            "min": 0,
+            "max": 0
+        },
+        "dropped_iterations": {
+            "count": 0,
+            "rate": 0,
+            "thresholds": {
+                "count==0": false
+            }
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 122,
+            "thresholds": {
+                "rate<0.01": false
+            },
+            "value": 0
+        },
+        "iteration_duration": {
+            "avg": 6.577926229508196,
+            "p(50)": 6.3501,
+            "p(95)": 7.9155,
+            "p(99)": 11.42886,
+            "max": 11.4441,
+            "count": 61
+        },
+        "http_req_duration{operation:chat}": {
+            "p(99)": 7.156679999999999,
+            "max": 7.668,
+            "count": 61,
+            "avg": 4.304683606557376,
+            "p(50)": 4.2297,
+            "p(95)": 4.7653,
+            "thresholds": {
+                "p(95)<1500": false
+            }
+        }
+    }
+}

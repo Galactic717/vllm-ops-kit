@@ -1,0 +1,14 @@
+backend:
+  mode: vllm
+  model: verifine
+  modelClaim: vllm-model
+  maxModelLen: 2048
+  gpuMemoryUtilization: 0.85
+verstak:
+  llmProvider: openai-compatible
+monitoring:
+  enabled: true
+autoscaling:
+  enabled: true
+pdb:
+  enabled: true

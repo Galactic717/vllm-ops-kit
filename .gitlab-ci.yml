@@ -1,0 +1,39 @@
+# Requires a project-locked Linux amd64 shell runner with Docker and Python 3.12.
+# Use it for trusted refs only.
+stages: [lint, verify]
+default:
+  tags: [docker-shell]
+  before_script:
+    - export PATH="$CI_PROJECT_DIR/.ci-bin:$PATH"
+    - bash scripts/ci_tools.sh "$CI_PROJECT_DIR/.ci-bin"
+    - python3 -m venv .ci-venv
+    - source .ci-venv/bin/activate
+lint:
+  stage: lint
+  script:
+    - python -m pip install ansible-core==2.19.8
+    - bash scripts/ci_lint.sh
+security:
+  stage: verify
+  resource_group: vllm-ops-kit-docker
+  script:
+    - python -m pip install checkov==3.2.524
+    - python scripts/images.py --fetch
+    - bash scripts/ci_security.sh
+  artifacts:
+    when: always
+    paths: [loadtest/results/latest/security/]
+kind:
+  stage: verify
+  resource_group: vllm-ops-kit-docker
+  script:
+    - python scripts/images.py --fetch
+    - python scripts/kind_lab.py
+  after_script:
+    - export PATH="$CI_PROJECT_DIR/.ci-bin:$PATH"
+    - mkdir -p loadtest/results/latest
+    - kind export logs --name vllm-ops-kit loadtest/results/latest/kind-logs || true
+    - kind delete cluster --name vllm-ops-kit --kubeconfig .kubeconfig-kind
+  artifacts:
+    when: always
+    paths: [loadtest/results/latest/]

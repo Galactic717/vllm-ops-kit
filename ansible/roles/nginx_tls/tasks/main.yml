@@ -1,0 +1,31 @@
+---
+- name: Install Nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+
+- name: Install the TLS reverse proxy
+  ansible.builtin.template:
+    src: vllm-ops.conf.j2
+    dest: /etc/nginx/sites-available/vllm-ops
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload Nginx
+
+- name: Enable the TLS site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/vllm-ops
+    src: /etc/nginx/sites-available/vllm-ops
+    state: link
+  notify: Reload Nginx
+
+- name: Validate the complete Nginx configuration
+  ansible.builtin.command: /usr/sbin/nginx -t
+  changed_when: false
+
+- name: Enable Nginx
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: started

@@ -1,0 +1,12 @@
+persistence:
+  enabled: false
+verstak:
+  llmProvider: openai-compatible
+ingress:
+  enabled: true
+monitoring:
+  enabled: true
+autoscaling:
+  enabled: true
+pdb:
+  enabled: true

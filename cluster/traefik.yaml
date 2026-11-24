@@ -1,0 +1,17 @@
+service:
+  type: NodePort
+ports:
+  web:
+    nodePort: 30080
+providers:
+  kubernetesCRD:
+    enabled: false
+  kubernetesIngress:
+    enabled: true
+logs:
+  access:
+    enabled: true
+    format: json
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
