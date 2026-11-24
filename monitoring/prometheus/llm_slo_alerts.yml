@@ -1,0 +1,54 @@
+groups:
+  - name: inference
+    rules:
+      - alert: HighTTFT
+        expr: histogram_quantile(0.95, sum by (namespace, service, model_name, le) (rate(vllm:time_to_first_token_seconds_bucket[5m]))) > 1.5
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: vLLM p95 time to first token exceeds 1.5 seconds
+      - alert: KVCacheSaturation
+        expr: max by (namespace, service, model_name) (vllm:kv_cache_usage_perc) > 0.85
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: vLLM KV cache utilization exceeds 85 percent
+  - name: api-and-dependencies
+    rules:
+      - alert: High5xxBurnRate
+        expr: |
+          (
+            sum by (namespace, service) (rate(verstak_http_requests_total{status=~"5.."}[5m])) /
+            sum by (namespace, service) (rate(verstak_http_requests_total[5m])) > 0.144
+            and
+            sum by (namespace, service) (rate(verstak_http_requests_total{status=~"5.."}[1h])) /
+            sum by (namespace, service) (rate(verstak_http_requests_total[1h])) > 0.144
+          ) or (
+            sum by (namespace, service) (rate(verstak_http_requests_total{status=~"5.."}[30m])) /
+            sum by (namespace, service) (rate(verstak_http_requests_total[30m])) > 0.06
+            and
+            sum by (namespace, service) (rate(verstak_http_requests_total{status=~"5.."}[6h])) /
+            sum by (namespace, service) (rate(verstak_http_requests_total[6h])) > 0.06
+          )
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: Verstak is rapidly consuming its 1 percent 5xx error budget
+      - alert: CeleryBacklog
+        expr: max by (namespace, service) (ops_celery_queue_depth) > 100
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: The default Redis Celery queue has over 100 pending messages
+      - alert: PostgresPoolExhaustion
+        expr: verstak_db_pool_checked_out / verstak_db_pool_size >= 0.9
+        for: 3m
+        labels: {severity: warning}
+        annotations:
+          summary: A Verstak API replica is using at least 90 percent of its connection pool
+      - alert: DependencyUnavailable
+        expr: ops_postgres_up == 0 or ops_redis_up == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: PostgreSQL or Redis failed its own exporter check

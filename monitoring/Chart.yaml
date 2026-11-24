@@ -1,0 +1,5 @@
+apiVersion: v2
+name: ops-observability
+description: SLO alerts and Grafana dashboards for ai-stack
+type: application
+version: 0.1.0
