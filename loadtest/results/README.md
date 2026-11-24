@@ -44,4 +44,4 @@ Trivy v0.69.3 found zero HIGH or CRITICAL issues with published fixes in the fiv
 | PostgreSQL | 72 | 1 |
 | Redis | 0 | 0 |
 
-The live tests covered Windows inference and the CPU Kubernetes lab. AWS/GCP deployment, the Ubuntu VM play and vLLM inference on a GPU still require verification on the target infrastructure. GitHub Actions and GitLab have local verification scripts and await their first hosted runs.
+The live tests covered Windows inference and the CPU Kubernetes lab. AWS/GCP deployment, the Ubuntu VM play and vLLM inference on a GPU still require verification on the target infrastructure. GitHub Actions uploads k6 and security artifacts for each hosted run. [Workflow history](https://github.com/Galactic717/vllm-ops-kit/actions/workflows/ci.yml)
