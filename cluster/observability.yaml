@@ -1,0 +1,28 @@
+defaultRules:
+  create: false
+alertmanager:
+  config:
+    route:
+      receiver: local
+      routes: []
+    receivers:
+      - name: local
+grafana:
+  sidecar:
+    dashboards:
+      searchNamespace: monitoring
+  defaultDashboardsEnabled: false
+prometheus:
+  prometheusSpec:
+    scrapeInterval: 10s
+    evaluationInterval: 15s
+    retention: 2d
+    serviceMonitorSelector:
+      matchLabels:
+        observability: vllm-ops-kit
+    ruleSelector:
+      matchLabels:
+        observability: vllm-ops-kit
+    resources:
+      requests: {cpu: 100m, memory: 192Mi}
+      limits: {cpu: "1", memory: 768Mi}
