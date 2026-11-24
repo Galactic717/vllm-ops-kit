@@ -1,0 +1,106 @@
+{{- $name := include "ops.name" . -}}
+{{- $items := list
+  (dict "name" "postgres" "image" .Values.images.postgres "port" 5432 "path" "/var/lib/postgresql/data" "size" .Values.persistence.postgresSize)
+  (dict "name" "redis" "image" .Values.images.redis "port" 6379 "path" "/data" "size" .Values.persistence.redisSize) -}}
+{{- range $db := $items }}
+{{- $selector := dict "root" $ "component" $db.name }}
+{{- $pg := eq $db.name "postgres" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-{{ $db.name }}
+  labels:
+    {{- include "ops.selector" $selector | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "ops.selector" $selector | nindent 4 }}
+  ports:
+    - {name: db, port: {{ $db.port }}, targetPort: db}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}-{{ $db.name }}
+spec:
+  serviceName: {{ $name }}-{{ $db.name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ops.selector" $selector | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ops.selector" $selector | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "ops.podSecurity" 999 | nindent 8 }}
+      containers:
+        - name: {{ $db.name }}
+          image: {{ $db.image | quote }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          securityContext:
+            {{- include "ops.containerSecurity" . | nindent 12 }}
+          ports:
+            - {name: db, containerPort: {{ $db.port }}}
+          {{- if $pg }}
+          args: ["postgres", "-c", "password_encryption=scram-sha-256"]
+          env:
+            {{- include "ops.secretEnv" (dict "root" $ "name" "POSTGRES_PASSWORD") | nindent 12 }}
+            - {name: POSTGRES_USER, value: verstak}
+            - {name: POSTGRES_DB, value: verstak}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - {name: HOME, value: /tmp}
+          {{- else }}
+          command: ["sh", "-ec"]
+          args: ['exec redis-server --appendonly yes --dir /data --requirepass "$REDISCLI_AUTH"']
+          env:
+            {{- include "ops.secretEnv" (dict "root" $ "name" "REDISCLI_AUTH" "key" "REDIS_PASSWORD") | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            exec:
+              command: {{ ternary (list "pg_isready" "-h" "127.0.0.1" "-U" "verstak" "-d" "verstak") (list "sh" "-ec" "redis-cli ping | grep -qx PONG") $pg | toJson }}
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command: {{ ternary (list "pg_isready" "-h" "127.0.0.1" "-U" "verstak" "-d" "verstak") (list "sh" "-ec" "redis-cli ping | grep -qx PONG") $pg | toJson }}
+          livenessProbe:
+            tcpSocket: {port: db}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: "1", memory: {{ ternary "512Mi" "256Mi" $pg }}}
+          volumeMounts:
+            - {name: data, mountPath: {{ $db.path }}}
+            - {name: tmp, mountPath: /tmp}
+            {{- if $pg }}
+            - {name: socket, mountPath: /var/run/postgresql}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if $pg }}
+        - name: socket
+          emptyDir: {}
+        {{- end }}
+        {{- if not $.Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if $.Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with $.Values.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $db.size }}
+  {{- end }}
+{{- end }}

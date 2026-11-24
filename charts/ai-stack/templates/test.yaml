@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "ops.name" . }}-helm-test
+  labels:
+    {{- include "ops.selector" (dict "root" . "component" "helm-test") | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    {{- include "ops.podSecurity" 1000 | nindent 4 }}
+  containers:
+    - name: smoke
+      image: {{ .Values.images.verifine | quote }}
+      imagePullPolicy: {{ .Values.imagePullPolicy }}
+      securityContext:
+        {{- include "ops.containerSecurity" . | nindent 8 }}
+      resources:
+        requests: {cpu: 20m, memory: 32Mi}
+        limits: {cpu: 250m, memory: 128Mi}
+      env:
+        {{- include "ops.secretEnv" (dict "root" . "name" "VERIFINE_GATEWAY_KEY") | nindent 8 }}
+        - {name: STACK_NAME, value: {{ include "ops.name" . }}}
+        - {name: EXPECTED_MODEL, value: {{ .Values.backend.model | quote }}}
+      command: ["python", "-c"]
+      args:
+        - |
+          import json, os, urllib.request
+          stack = os.environ["STACK_NAME"]
+          with urllib.request.urlopen(f"http://{stack}-api:8000/healthz", timeout=10) as res:
+              assert json.load(res)["status"] == "ok"
+          req = urllib.request.Request(
+              f"http://{stack}-gateway:8088/v1/models",
+              headers={"Authorization": "Bearer " + os.environ["VERIFINE_GATEWAY_KEY"]},
+          )
+          with urllib.request.urlopen(req, timeout=10) as res:
+              assert os.environ["EXPECTED_MODEL"] in [item["id"] for item in json.load(res)["data"]]
+          req = urllib.request.Request(
+              f"http://{stack}-gateway:8088/v1/chat/completions",
+              json.dumps({
+                  "model": os.environ["EXPECTED_MODEL"],
+                  "messages": [{"role": "user", "content": "Reply with OK."}],
+                  "max_tokens": 64,
+              }).encode(),
+              {"Authorization": "Bearer " + os.environ["VERIFINE_GATEWAY_KEY"],
+               "Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(req, timeout=60) as res:
+              assert json.load(res)["choices"]

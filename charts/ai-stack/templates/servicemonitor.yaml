@@ -1,0 +1,33 @@
+{{- if .Values.monitoring.enabled }}
+{{- $name := include "ops.name" . }}
+{{- range $target := list "api" "gateway" "backend" "dependencies" }}
+{{- if or (ne $target "backend") (ne $.Values.backend.mode "external") }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $name }}-{{ $target }}
+  labels:
+    observability: vllm-ops-kit
+spec:
+  selector:
+    matchLabels:
+      {{- include "ops.selector" (dict "root" $ "component" $target) | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 10s
+      scrapeTimeout: 8s
+      {{- if eq $target "api" }}
+      authorization:
+        credentials:
+          name: {{ $.Values.existingSecret }}
+          key: VERSTAK_METRICS_TOKEN
+    - port: http
+      path: /ops/pool-metrics
+      interval: 10s
+      scrapeTimeout: 8s
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

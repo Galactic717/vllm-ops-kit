@@ -1,0 +1,50 @@
+existingSecret: ai-stack-runtime
+backend:
+  mode: fixture
+  model: ops-fixture
+  externalUrl: ""
+  externalKind: llama
+  externalEgressCIDR: ""
+  externalEgressPort: 8080
+  fixtureImage: vllm-ops-fixture:local
+  vllmImage: vllm/vllm-openai:v0.18.0
+  modelClaim: ""
+  modelPath: /model
+  maxModelLen: 2048
+  gpuMemoryUtilization: 0.85
+  runtimeClassName: ""
+  nodeSelector: {}
+  tolerations: []
+images:
+  verstak: verstak-agent:local
+  verifine: verifine-slm:local
+  postgres: vllm-ops-postgres:local
+  redis: redis:7.4.12-alpine
+imagePullPolicy: IfNotPresent
+verstak:
+  # The CI and GPU profiles send worker traffic through Verifine.
+  llmProvider: fixture
+  replicas: 1
+persistence:
+  enabled: true
+  storageClass: ""
+  postgresSize: 2Gi
+  redisSize: 1Gi
+ingress:
+  enabled: false
+  className: traefik
+  namespace: ingress-system
+  host: ""
+  tlsSecret: ""
+monitoring:
+  enabled: false
+  namespace: monitoring
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  cpuUtilization: 60
+networkPolicy:
+  enabled: true
+pdb:
+  enabled: false
