@@ -1,0 +1,5 @@
+bucket       = "replace-with-a-pre-existing-state-bucket"
+key          = "prod-gpu/terraform.tfstate"
+region       = "us-east-1"
+encrypt      = true
+use_lockfile = true

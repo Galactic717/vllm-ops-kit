@@ -1,0 +1,13 @@
+metadata:
+  id: CKV2_GCP_9001
+  name: Reject unrestricted GCP ingress CIDRs
+  category: NETWORKING
+scope:
+  provider: GCP
+definition:
+  cond_type: attribute
+  resource_types:
+    - google_compute_firewall
+  attribute: source_ranges
+  operator: not_contains
+  value: 0.0.0.0/0
