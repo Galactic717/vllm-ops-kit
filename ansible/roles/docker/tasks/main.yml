@@ -1,0 +1,66 @@
+---
+- name: Install Docker and Compose v2
+  ansible.builtin.apt:
+    name: [docker.io, docker-compose-v2]
+    state: present
+
+- name: Start Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Create the fixture deployment directory
+  ansible.builtin.file:
+    path: "{{ ops_dir }}/fixture"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy the lab fixture source
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../fixture/{{ item }}"
+    dest: "{{ ops_dir }}/fixture/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [Dockerfile, server.py]
+  notify: Restart inference service
+
+- name: Configure Compose
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ ops_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart inference service
+
+- name: Install the inference systemd unit
+  ansible.builtin.template:
+    src: vllm-ops.service.j2
+    dest: /etc/systemd/system/vllm-ops.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart inference service
+
+- name: Enable the VM inference service
+  ansible.builtin.systemd_service:
+    name: vllm-ops
+    daemon_reload: true
+    enabled: true
+    state: started
+
+- name: Apply fixture updates before probing
+  ansible.builtin.meta: flush_handlers
+
+- name: Check fixture readiness on the VM
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ ops_port }}/health"
+    status_code: 200
+  register: fixture_health
+  retries: 15
+  delay: 2
+  until: fixture_health.status == 200

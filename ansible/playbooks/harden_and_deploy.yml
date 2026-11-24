@@ -1,0 +1,34 @@
+---
+- name: Configure the Ubuntu inference lab
+  hosts: ops_nodes
+  become: true
+  vars:
+    ops_dir: /opt/vllm-ops-kit
+    ops_port: 18088
+  pre_tasks:
+    - name: Check the target and required inputs
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Ubuntu'
+          - ansible_distribution_version == '24.04'
+          - ansible_user is defined and ansible_user != 'root'
+          - ops_admin_cidr is defined and ops_admin_cidr is match('^[0-9.]+/(?:[1-9]|[12][0-9]|3[0-2])$')
+          - ops_client_cidr is defined and ops_client_cidr is match('^[0-9.]+/(?:[1-9]|[12][0-9]|3[0-2])$')
+          - ops_ssh_public_key is defined
+          - ops_tls_name is defined and ops_tls_name is match('^[a-zA-Z0-9.-]+$')
+          - ops_tls_certificate is defined and ops_tls_certificate is match('^/[a-zA-Z0-9_./-]+$')
+          - ops_tls_key is defined and ops_tls_key is match('^/[a-zA-Z0-9_./-]+$')
+    - name: Check deployed TLS files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: ["{{ ops_tls_certificate }}", "{{ ops_tls_key }}"]
+      register: tls_files
+    - name: Require existing certificate and private key
+      ansible.builtin.assert:
+        that:
+          - tls_files.results | map(attribute='stat.exists') | select('equalto', false) | list | length == 0
+  roles:
+    - hardening
+    - docker
+    - node_exporter
+    - nginx_tls

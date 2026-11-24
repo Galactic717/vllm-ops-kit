@@ -1,0 +1,6 @@
+ops_admin_cidr: "203.0.113.8/32"
+ops_client_cidr: "203.0.113.8/32"
+ops_ssh_public_key: "{{ lookup('ansible.builtin.file', '~/.ssh/id_ed25519.pub') }}"
+ops_tls_name: "ops.example.net"
+ops_tls_certificate: "/etc/ssl/ops/fullchain.pem"
+ops_tls_key: "/etc/ssl/ops/privkey.pem"
