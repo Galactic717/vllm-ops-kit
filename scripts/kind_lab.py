@@ -25,6 +25,12 @@ KUBECONFIG = ROOT / ".kubeconfig-kind"
 BASE = "http://127.0.0.1:18080"
 CALICO = "https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/calico.yaml"
 METRICS_SERVER = "https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.0/components.yaml"
+LOCAL_IMAGE_REPOSITORIES = {
+    "backend.fixtureImage": "vllm-ops-fixture",
+    "images.postgres": "vllm-ops-postgres",
+    "images.verstak": "verstak-agent",
+    "images.verifine": "verifine-slm",
+}
 
 
 def run(*args, data=None, capture=False, env=None):
@@ -36,8 +42,8 @@ def kubectl(*args, **kwargs):
     return run("kubectl", "--kubeconfig", str(KUBECONFIG), "--context", CONTEXT, *args, **kwargs)
 
 
-def helm(*args):
-    return run("helm", "--kubeconfig", str(KUBECONFIG), "--kube-context", CONTEXT, *args)
+def helm(*args, **kwargs):
+    return run("helm", "--kubeconfig", str(KUBECONFIG), "--kube-context", CONTEXT, *args, **kwargs)
 
 
 def apply(resource):
@@ -46,6 +52,56 @@ def apply(resource):
 
 def ready_deployment(namespace, name):
     kubectl("-n", namespace, "rollout", "status", "deployment/" + name, "--timeout=4m")
+
+
+def load_local_images():
+    images = {}
+    for value, repository in LOCAL_IMAGE_REPOSITORIES.items():
+        image_id = run("docker", "image", "inspect", "--format", "{{.Id}}",
+                       repository + ":local", capture=True).strip()
+        image = repository + ":" + image_id.removeprefix("sha256:")
+        run("docker", "image", "tag", image_id, image)
+        images[value] = image
+
+    # Keep the Docker Desktop archive single-platform.
+    with tempfile.TemporaryDirectory(prefix="ops-kind-") as directory:
+        archive = str(Path(directory) / "images.tar")
+        run("docker", "image", "save", "--platform", "linux/amd64", "-o", archive, *images.values())
+        run("kind", "load", "image-archive", "--name", CLUSTER, archive)
+    return images
+
+
+def deployed_images():
+    releases = helm("list", "--all", "--filter", "^ops$", "-n", NAMESPACE, "-o", "json",
+                    capture=True)
+    if not json.loads(releases):
+        return None
+    values = json.loads(helm("get", "values", "ops", "-n", NAMESPACE, "-o", "json", capture=True))
+    images = {}
+    for path in LOCAL_IMAGE_REPOSITORIES:
+        group, key = path.split(".")
+        if image := (values or {}).get(group, {}).get(key):
+            images[path] = image
+    return images
+
+
+def deploy_app(images, previous):
+    image_args = [
+        arg for value, image in images.items() for arg in ("--set-string", f"{value}={image}")
+    ]
+    started = time.monotonic()
+    helm("upgrade", "--install", "ops", "charts/ai-stack", "-n", NAMESPACE, "-f",
+         "charts/ai-stack/values-ci.yaml", *image_args, "--wait", "--timeout", "5m")
+    deploy_seconds = round(time.monotonic() - started, 2)
+
+    # A replaced, ephemeral PostgreSQL pod needs the schema even if the API did not roll.
+    postgres = images.get("images.postgres")
+    if previous is not None and postgres and postgres != previous.get(
+        "images.postgres", "vllm-ops-postgres:local"
+    ):
+        kubectl("-n", NAMESPACE, "exec", "deployment/ops-api", "--", "alembic", "upgrade", "head")
+    helm("test", "ops", "-n", NAMESPACE, "--timeout", "90s")
+    return deploy_seconds
 
 
 def install(skip_import):
@@ -82,21 +138,9 @@ def install(skip_import):
         "name": NAMESPACE, "labels": {"pod-security.kubernetes.io/enforce": "restricted"},
     }})
     secret = ensure(NAMESPACE, "ai-stack-runtime", kubectl)
-    if not skip_import:
-        # A single-platform archive avoids missing index manifests on Docker Desktop.
-        with tempfile.TemporaryDirectory(prefix="ops-kind-") as directory:
-            archive = str(Path(directory) / "images.tar")
-            run("docker", "image", "save", "--platform", "linux/amd64", "-o", archive,
-                "vllm-ops-fixture:local", "vllm-ops-postgres:local",
-                "verstak-agent:local", "verifine-slm:local")
-            run("kind", "load", "image-archive", "--name", CLUSTER, archive)
-
-    started = time.monotonic()
-    helm("upgrade", "--install", "ops", "charts/ai-stack", "-n", NAMESPACE, "-f",
-         "charts/ai-stack/values-ci.yaml", "--wait", "--timeout", "5m")
-    deploy_seconds = round(time.monotonic() - started, 2)
-    helm("test", "ops", "-n", NAMESPACE, "--timeout", "90s")
-    return secret, deploy_seconds
+    previous = deployed_images()
+    images = (previous or {}) if skip_import else load_local_images()
+    return secret, deploy_app(images, previous)
 
 
 def request(url, body=None, headers=None, raw=False):
@@ -164,15 +208,21 @@ def verify_ingress(secret):
                       run_headers)
     url = BASE + "/runs/" + receipt["id"]
 
-    def completed():
-        status = request(url, headers=bearer(token))["status"]
-        if status in {"succeeded", "waiting_approval"}:
-            return status
-        if status in {"failed", "rejected"}:
-            raise RuntimeError(f"Celery workflow ended with {status}")
+    def at_status(expected):
+        run = request(url, headers=bearer(token))
+        status = run["status"]
+        if status == expected:
+            return run
+        if status in {"succeeded", "failed", "rejected"}:
+            raise RuntimeError(f"Expected {expected}, but the Celery workflow ended with {status}")
         return None
 
-    return token, eventually(completed, "Celery workflow", 75)
+    pending = eventually(lambda: at_status("waiting_approval"), "Celery approval gate", 75)
+    if pending["verification"] != {"accepted": True, "findings": []}:
+        raise RuntimeError("The fixture proposal did not pass evidence verification")
+    request(BASE + "/approvals/" + receipt["id"], {"approved": True}, bearer(token))
+    finished = eventually(lambda: at_status("succeeded"), "approved Celery workflow", 75)
+    return token, finished["status"]
 
 
 def verify_policy():
@@ -190,6 +240,8 @@ def verify_policy():
 
     # An unrelated pod must resolve the Service yet be unable to connect to it.
     name = "ops-policy-probe"
+    image = kubectl("-n", NAMESPACE, "get", "deployment/ops-gateway", "-o",
+                    "jsonpath={.spec.template.spec.containers[0].image}", capture=True)
     script = """import socket
 host = "ops-api"
 socket.getaddrinfo(host, 8000)
@@ -205,7 +257,7 @@ else:
            "spec": {"restartPolicy": "Never", "automountServiceAccountToken": False,
                     "securityContext": {"runAsNonRoot": True, "runAsUser": 1000,
                                         "seccompProfile": {"type": "RuntimeDefault"}},
-                    "containers": [{"name": "probe", "image": "verifine-slm:local",
+                    "containers": [{"name": "probe", "image": image,
                                     "imagePullPolicy": "IfNotPresent",
                                     "securityContext": {"readOnlyRootFilesystem": True,
                                                         "allowPrivilegeEscalation": False,

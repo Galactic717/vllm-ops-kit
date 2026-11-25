@@ -47,4 +47,4 @@ The fixture emits its own counters. GPU latency and cache panels populate when P
 
 ## CI runners
 
-GitHub Actions runs infrastructure lint, the live lab and image scans on Ubuntu. The GitLab template uses a project-locked Linux amd64 shell runner tagged docker-shell, with Docker Engine 28+, Python 3.12 and access to the needed registries. Reserve it for trusted refs because jobs can control its Docker daemon. CI exports run evidence and scanner results as artifacts. The cloud plan workflow uses a protected GitHub environment and expiring OIDC credentials.
+GitHub Actions runs infrastructure lint, the live lab and image scans on Ubuntu. The GitLab template uses a project-locked Linux amd64 shell runner tagged docker-shell, with Docker Engine 28+, Python 3.12 and access to the needed registries. Reserve it for trusted refs because jobs can control its Docker daemon. CI exports run evidence and scanner results as artifacts. The optional cloud plan workflow requires a configured GitHub environment and uses expiring OIDC credentials. Set up the environment and its protection rules before dispatching a plan.

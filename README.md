@@ -60,7 +60,7 @@ kubectl --kubeconfig .kubeconfig-kind -n monitoring port-forward svc/kps-grafana
 
 Open Grafana at http://127.0.0.1:13000. Sign in as `admin` with the `admin-password` key from the `kps-grafana` Secret in the `monitoring` namespace. The [architecture guide](docs/ARCHITECTURE.md#signals) lists the metrics behind the dashboards.
 
-Use `python scripts/kind_lab.py --verify-only` to rerun checks against the existing lab. Add `--profiles soak --base-rate 5` for a ten-minute run. Remove the lab with `kind delete cluster --name vllm-ops-kit --kubeconfig .kubeconfig-kind`.
+To redeploy, repeat your image build command and rerun `python scripts/kind_lab.py`. The lab pins each local image by its build ID, so a changed image rolls out even when the source tag is still `:local`. The lab uses disposable database storage. A new PostgreSQL image recreates that database and reapplies its schema. Use `python scripts/kind_lab.py --verify-only` to rerun checks against the existing lab. Add `--profiles soak --base-rate 5` for a ten-minute run. Remove the lab with `kind delete cluster --name vllm-ops-kit --kubeconfig .kubeconfig-kind`.
 
 ## Windows with llama.cpp
 

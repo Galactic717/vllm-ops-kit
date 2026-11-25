@@ -52,7 +52,7 @@ python3 scripts/images.py --fetch
 python3 scripts/kind_lab.py
 ~~~
 
-Ingress слухає **127.0.0.1:18080**. Стенд використовує окремий `.kubeconfig-kind` і записує звіти до `loadtest/results/latest/`. Команда `python scripts/kind_lab.py --verify-only` повторює перевірку вже запущеного стенду. Щоб видалити стенд, виконайте `kind delete cluster --name vllm-ops-kit --kubeconfig .kubeconfig-kind`.
+Ingress слухає **127.0.0.1:18080**. Стенд використовує окремий `.kubeconfig-kind` і записує звіти до `loadtest/results/latest/`. Після перебудови образів повторіть `python scripts/kind_lab.py`. Стенд використовує теги з ідентифікаторами збірок, тому змінені образи потрапляють у нові поди. Сховище стенда тимчасове. Новий образ PostgreSQL створює базу заново й застосовує міграції. Команда `python scripts/kind_lab.py --verify-only` повторює перевірку вже запущеного стенду. Щоб видалити стенд, виконайте `kind delete cluster --name vllm-ops-kit --kubeconfig .kubeconfig-kind`.
 
 ## Локальна перевірка у Windows
 
