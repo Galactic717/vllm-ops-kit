@@ -5,8 +5,8 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = {
-    "verstak-agent": "f1b598ab894d015c18d608719137d953da8718aa",
-    "verifine-slm": "34e60379727b4f66241d833cd72660a1180b73af",
+    "verstak-agent": "e667e7ce1b1beb7bcc795778e302ac5c901bbab5",
+    "verifine-slm": "07ceb3203e4040b5a5f990d2b7178899dd2d56c9",
 }
 
 
